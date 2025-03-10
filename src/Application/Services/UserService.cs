@@ -1,11 +1,9 @@
 ﻿using Application.DTOs;
+using Application.Exceptions;
 using Application.Interfaces;
 using BCrypt.Net;
 using Domain.Entities;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Application.Services
@@ -23,9 +21,21 @@ namespace Application.Services
 
         public async Task<UserDto> RegisterAsync(RegisterUserDto dto)
         {
+            if (dto == null)
+            {
+                throw new ValidationException("Invalid user data.");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
+            {
+                throw new ValidationException("Email and password are required.");
+            }
+
             var existingUser = await _userRepository.GetByEmailAsync(dto.Email);
             if (existingUser is not null)
-                throw new Exception("User already exists.");
+            {
+                throw new ConflictException("User already exists.");
+            }
 
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
@@ -48,9 +58,16 @@ namespace Application.Services
 
         public async Task<TokenDto> LoginAsync(LoginUserDto loginDto)
         {
+            if (loginDto == null || string.IsNullOrWhiteSpace(loginDto.Email) || string.IsNullOrWhiteSpace(loginDto.Password))
+            {
+                throw new ValidationException("Email and password are required.");
+            }
+
             var user = await _userRepository.GetByEmailAsync(loginDto.Email);
             if (user == null || !BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash))
-                throw new UnauthorizedAccessException("Invalid credentials.");
+            {
+                throw new UnauthorizedException("Invalid credentials.");
+            }
 
             var token = _jwtTokenGenerator.GenerateToken(user);
 
@@ -59,9 +76,16 @@ namespace Application.Services
 
         public async Task<UserDto> GetUserByIdAsync(Guid userId)
         {
+            if (userId == Guid.Empty)
+            {
+                throw new ValidationException("Invalid user ID.");
+            }
+
             var user = await _userRepository.GetByIdAsync(userId);
             if (user is null)
-                throw new Exception("User not found.");
+            {
+                throw new NotFoundException("User not found.");
+            }
 
             return new UserDto
             {
@@ -71,6 +95,4 @@ namespace Application.Services
             };
         }
     }
-
 }
-

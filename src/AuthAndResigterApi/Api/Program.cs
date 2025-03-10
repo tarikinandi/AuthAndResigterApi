@@ -1,5 +1,7 @@
 ﻿using Application.Interfaces;
 using Application.Services;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Infrastructure.Data.Repositories;
 using Infrastructure.Data;
 using Infrastructure.Identity;
@@ -7,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Application.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +28,13 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 
+// FluentValidation Entegrasyonu (DTO doğrulamaları için)
+builder.Services.AddControllers()
+    .AddFluentValidation(fv =>
+    {
+        fv.RegisterValidatorsFromAssemblyContaining<RegisterUserValidator>();
+    });
+
 // JWT Ayarları
 builder.Services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
 
@@ -41,13 +51,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidIssuer = jwtSettings.Issuer,
-            ValidAudience = jwtSettings.Audience
+            ValidAudience = jwtSettings.Audience,
+            ClockSkew = TimeSpan.Zero 
         };
     });
 
 builder.Services.AddAuthorization();
 
-//  Swagger JWT Desteği Eklendi
+// Swagger JWT Desteği Eklendi
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "My API", Version = "v1" });
@@ -79,8 +90,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Controllers
-builder.Services.AddControllers();
+// Controllers ve API Servisleri
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
@@ -92,10 +102,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Middleware Sırası (Önemli!)
 app.UseHttpsRedirection();
+app.UseMiddleware<ExceptionMiddleware>(); 
 app.UseAuthentication();
+app.UseMiddleware<JwtMiddleware>(); 
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
